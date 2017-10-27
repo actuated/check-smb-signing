@@ -17,7 +17,7 @@ Shell script to automate running Nmap's smb-security-mode.nse and parse results 
   - **check-smb-signing-count-HH-MM.txt** records the number and percentage count shown by the script.
   - **check-smb-signing-parsed-HH-MM.txt** contains each `ip   message signing: [value]` result.
   - **check-smb-signing-scan-HH-MM.txt** records the `nmap --script smb-security-mode.nse` output.
-  - **hosts-singing-disabled.txt** lists each IP with SMB signing disabled.
+  - **hosts-signing-disabled.txt** lists each IP with SMB signing disabled.
   - **hosts-signing-required.txt** lists each IP with SMB signing required.
   - **hosts-signing-supported.txt** lists each IP with SMB signing supported/enabled but not required.
   
