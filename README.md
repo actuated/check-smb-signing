@@ -40,9 +40,9 @@ Parsing results...
 
  Total SMB Hosts: 		 2 
 
- Signing Required: 		 0 	 0% 
- Supported, not Required: 	 0 	 0% 
- Signing Disabled: 		 2 	 100% 
+ Signing Required: 		 0 (0%) 
+ Supported, not Required: 	 0 (0%) 
+ Signing Disabled: 		 2 (100%) 
 
 =======================================[ fin ]=======================================
 ```
@@ -59,9 +59,9 @@ Parsing results...
 
  Total SMB Hosts: 		 74 
 
- Signing Required: 		 50 	 67.5% 
- Supported, not Required: 	 14 	 18.9% 
- Signing Disabled: 		 10 	 13.5% 
+ Signing Required: 		 50 (67.5%) 
+ Supported, not Required: 	 14 (18.9%)
+ Signing Disabled: 		 10 (13.5%) 
 
 =======================================[ fin ]=======================================
 ```

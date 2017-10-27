@@ -1,7 +1,8 @@
 #!/bin/bash
 # check-smb-signing.sh (v1.0)
-# v1.0 - 10/26/2017 by Ted R (http://github.com/actuated)
+# v1.1 - 10/26/2017 by Ted R (http://github.com/actuated)
 # Script to run and parse SMB message signing results using Nmap's smb-security-mode.nse
+# 10/27/2017 - Modified space between counts and percentages to avoid large differences throwing off tabs
 varDateCreated="10/26/2017"
 varDateLastMod="10/27/2017"
 
@@ -138,18 +139,18 @@ function fnParse {
   echo
   echo -e "\033[1;37m Total SMB Hosts: \t\t $varTotalHosts \e[0m"
   echo
-  echo -e "\033[33;32m Signing Required: \t\t $varSigningRequired \t $varPercentRequired \e[0m"
-  echo -e "\033[33;33m Supported, not Required: \t $varSigningSupported \t $varPercentSupported \e[0m"
-  echo -e "\033[33;31m Signing Disabled: \t\t $varSigningDisabled \t $varPercentDisabled \e[0m"
+  echo -e "\033[33;32m Signing Required: \t\t $varSigningRequired ($varPercentRequired) \e[0m"
+  echo -e "\033[33;33m Supported, not Required: \t $varSigningSupported ($varPercentSupported) \e[0m"
+  echo -e "\033[33;31m Signing Disabled: \t\t $varSigningDisabled ($varPercentDisabled) \e[0m"
 
   echo > "$varOutDir/$varTempCount"
   echo "=================[ check-smb-signing.sh - Ted R (github: actuated) ]=================" >> "$varOutDir/$varTempCount"
   echo >> "$varOutDir/$varTempCount"
   echo -e "\033[1;37m Total SMB Hosts: \t\t $varTotalHosts \e[0m" >> "$varOutDir/$varTempCount" >> "$varOutDir/$varTempCount"
   echo >> "$varOutDir/$varTempCount"
-  echo -e "\033[33;32m Signing Required: \t\t $varSigningRequired \t $varPercentRequired \e[0m" >> "$varOutDir/$varTempCount"
-  echo -e "\033[33;33m Supported, not Required: \t $varSigningSupported \t $varPercentSupported \e[0m" >> "$varOutDir/$varTempCount"
-  echo -e "\033[33;31m Signing Disabled: \t\t $varSigningDisabled \t $varPercentDisabled \e[0m" >> "$varOutDir/$varTempCount"
+  echo -e "\033[33;32m Signing Required: \t\t $varSigningRequired ($varPercentRequired) \e[0m" >> "$varOutDir/$varTempCount"
+  echo -e "\033[33;33m Supported, not Required: \t $varSigningSupported ($varPercentSupported) \e[0m" >> "$varOutDir/$varTempCount"
+  echo -e "\033[33;31m Signing Disabled: \t\t $varSigningDisabled ($varPercentDisabled) \e[0m" >> "$varOutDir/$varTempCount"
   echo  >> "$varOutDir/$varTempCount"
   echo "=======================================[ fin ]=======================================">> "$varOutDir/$varTempCount"
   echo  >> "$varOutDir/$varTempCount"
