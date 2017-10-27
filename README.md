@@ -21,7 +21,8 @@ Shell script to automate running Nmap's smb-security-mode.nse and parse results 
   - **hosts-signing-required.txt** lists each IP with SMB signing required.
   - **hosts-signing-supported.txt** lists each IP with SMB signing supported/enabled but not required.
   
-  # Examples
+# Examples
+Input as a list of targets to scan and then parse:
 ```
 ./check-smb-signing.sh --out-dir test -f smb-hosts.txt 
 
@@ -45,6 +46,8 @@ Parsing results...
 
 =======================================[ fin ]=======================================
 ```
+Input as text file containing `nmap -n --script smb-security-mode.nse` terminal output to parse only:
+
 ```
 ./check-smb-signing.sh --out-dir test2 -r nmap-scan.txt 
 
