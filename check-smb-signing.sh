@@ -1,257 +1,384 @@
 #!/bin/bash
-# check-smb-signing.sh (v1.0)
+# check-smb-signing.sh (v2.0)
 # v1.1 - 10/26/2017 by Ted R (http://github.com/actuated)
-# Script to run and parse SMB message signing results using Nmap's smb-security-mode.nse
-# 10/27/2017 - Modified space between counts and percentages to avoid large differences throwing off tabs
-varDateCreated="10/26/2017"
-varDateLastMod="10/27/2017"
+# v2.0 - 10/30/2017
+# Script to run and parse SMB message signing results using Nmap's smb-security-mode.nse or RunFinger.py
+# 11/01/2017 - Test of different options and conditions
+varDateCreated="10/30/2017"
+varDateLastMod="11/01/2017"
+
+# Set location for RunFinger.py
+varRunFingerLocation="/usr/share/responder/tools/RunFinger.py"
 
 varYMDHM=$(date +%F-%H-%M)
 varHM=$(date +%H-%M)
-varTempScan="check-smb-signing-scan-$varHM.txt"
-varTempParsed="check-smb-signing-parsed-$varHM.txt"
-varTempCount="check-smb-signing-count-$varHM.txt"
-varOutDir="check-smb-signing-$varYMDHM"
+varOutDir="csmbs-$varYMDHM"
+varOutScan="csmbs-scan-$varHM.txt"
+varOutParsed="csmbs-parsed-$varHM.txt"
+varOutCount="csmbs-count-$varHM.txt"
+varTempAddrs="csmbs-temp-addrs-$varHM.txt"
+varTool="N"
+varCountTool=0
 varInMode="N"
-varTarget="N"
 varCountInMode=0
-
-# Function for providing help/usage text
+varHostDiscovery="N"
 
 function fnUsage {
   echo
-  echo "=================[ check-smb-signing.sh - Ted R (github: actuated) ]================="
+  echo "======================================[ about ]======================================"
   echo
-  echo "Script to run Nmap's smb-security-mode.nse against a file (-f) of targets or a range"
-  echo "of addresses (-a), then parse results into a count of hosts with each message signing"
-  echo "mode and separate files containing IPs for hosts with each message signing mode."
+  echo "Run a scan for SMB signing mode and/or parse a file of results into a count of hosts"
+  echo "and split files listing hosts with each signing mode value."
+  echo
+  echo "Specify Nmap's smb-security-mode.nse or lgandx's RunFinger.py. Specify a file listing"
+  echo "target hosts, an address or address range, or a file containing results from either."
   echo
   echo "Created $varDateCreated, last modified $varDateLastMod."
   echo
   echo "======================================[ usage ]======================================"
   echo
-  echo "./check-smb-signing.sh [input mode] [targets] [--out-dir [path]]"
+  echo "./check-smb-signing.sh [tool] [input options] [--out-dir [dir]] [--host-discovery]"
   echo
-  echo "Input Options (specify one):"
+  echo "Tool Parameter (must specify one):"
+  echo "--finger               Use lgandx's RunFinger.py to check SMB signing."
+  echo "--nmap                 Use Nmap's smb-security-mode.nse to check SMB signing."
   echo
-  echo "-f [target file]    Scan a file of targets. Will be used with Nmap's -iL option."
+  echo "Input Options (must specify one):"
+  echo "-a [address/range]     Specify an address or address range to scan."
+  echo "-f [file]              Specify a file containing addresses to scan."
+  echo "-r [file]              Specify a file containing stdout Nmap smb-security-mode.nse"
+  echo "                       results or RunFinger.py greppabe output to parse (no scan)."
   echo
-  echo "-a [target range]   Scan an IP range. Must include three '.' characters. Will be used"
-  echo "                    as the target input for Nmap."
+  echo "Note: -a and -f inputs will run through an Nmap list scan (-sL) to create a list of"
+  echo "target hosts from any Nmap-friendly range input before the NSE or RunFinger.py are"
+  echo "run against that resulting list of target hosts."
   echo
-  echo "-r [file]           Skip scanning by providing a file with stdout results from Nmap's"
-  echo "                    smb-security-mode NSE. Parsing is written to use the IP, so run"
-  echo "                    Nmap with -n, or use this script to scan."
+  echo "--finger-path [path]   When using --finger, specify the location of RunFinger.py"
+  echo "                       (including the filename). You can also change the value for"
+  echo "                       the varRunFingerLocation variable near the beginning of the"
+  echo "                       script."
   echo
-  echo "Output Options:"
+  echo "--out-dir [path]       Optionally specify a directory for output files (see below)."
+  echo "                       The default is 'csmbs-YMDHM/'."
   echo
-  echo "--out-dir [path]    Optionally specify an output directory. The default is:"
-  echo "                    ./check-smb-signing-YY-MM-DD-HH-MM/"
+  echo "--host-discovery       Optionally perform an Nmap host discovery scan (-sn) against"
+  echo "                       -a or -f target hosts before running the NSE or RunFinger.py."
   echo
   echo "===================================[ file output ]==================================="
   echo
-  echo "check-smb-signing-count-HH-MM.txt    Text file with color terminal output of counts."
-  echo "check-smb-signing-parsed-HH-MM.txt   Each 'ip   message_signing: [value]' result."
-  echo "check-smb-signing-scan-HH-MM.txt     Nmap smb-security-mode.nse output."
-  echo "hosts-signing-disabled.txt           List of IPs with signing disabled."
-  echo "hosts-signing-required.txt           List of IPs with signing required."
-  echo "hosts-signing-supported.txt          List of IPs with signing enabled/supported but"
-  echo "                                     not required."
+  echo "csmbs-count-HH-MM.txt       Output file with the color counts created by the script."
+  echo "csmbs-parsed-HH-MM.txt      Output file with '[host]   [SMB signing value]' results."
+  echo "csmbs-scan-HH-MM.txt        RunFinger.py or Nmap smb-security-mode.nse scan results."
+  echo "                            Not included when -r is used to parse your own results."
+  echo "hosts-signing-[value].txt   A list of hosts for each SMB signing value (true or false"
+  echo "                            for RunFinger.py and disabled, supported, or required for"
+  echo "                            the NSE. Only created when there are applicable hosts."
   echo
-  echo "Note: hosts-signing-[value].txt will only be created when applicable."
+  echo "=======================================[ fin ]======================================="
   echo
   exit
 }
 
 function fnScan {
+  
+  # Convert host lists and address ranges to a list of individual hosts
+  # This lets you specify Nmap-style ranges for RunFinger instead of just /24s or individual IPs
+  # This also ensures that even hostname inputs are converted to IPs
+  if [ "$varInMode" = "File" ]; then
+    nmap -iL "$varTarget" -sL -n -oG - | awk '/Host/{print $2}' | sort -V > "$varOutDir/$varTempAddrs"
+  elif [ "$varInMode" = "Address" ]; then
+    nmap "$varTarget" -sL -n -oG - | awk '/Host/{print $2}' | sort -V > "$varOutDir/$varTempAddrs"
+  fi
 
-  # Run Nmap depending on input mode
+  # Optionally use Nmap to do host discovery before running the NSE or RunFinger
+  if [ "$varHostDiscovery" = "Y" ]; then
+    echo
+    varTimeNow=$(date +%H:%M)
+    varCountScanHosts=$(wc -l "$varOutDir/$varTempAddrs" | awk '{print $1}')
+    echo "$varTimeNow - Starting host discovery for $varCountScanHosts hosts."
+    mv "$varOutDir/$varTempAddrs" "$varOutDir/csmbs-temp-before-host-discovery.txt"
+    nmap -iL "$varOutDir/csmbs-temp-before-host-discovery.txt" -sn -n -oG - | awk '/Up/{print $2}' | sort -V > "$varOutDir/$varTempAddrs"
+    rm "$varOutDir/csmbs-temp-before-host-discovery.txt"
+    varTimeNow=$(date +%H:%M)
+    varCountScanHosts=$(wc -l "$varOutDir/$varTempAddrs" | awk '{print $1}')
+    echo "$varTimeNow - Host discovery done with $varCountScanHosts hosts."
+  fi
 
+  # Run Nmap or RunFinger against target addresses
   echo
   varTimeNow=$(date +%H:%M)
-  echo "Nmap smb-security-mode.nse scan starting against $varTarget at $varTimeNow"
-  if [ "$varInMode" = "File" ]; then
-    nmap -iL "$varTarget" -sS -Pn -n -p 445 --open --script smb-security-mode.nse > "$varOutDir/$varTempScan"
-  elif [ "$varInMode" = "Address" ]; then
-    nmap "$varTarget" -sS -Pn -n -p 445 --open --script smb-security-mode.nse > "$varOutDir/$varTempScan"
+  varCountScanHosts=$(wc -l "$varOutDir/$varTempAddrs" | awk '{print $1}')
+  echo "$varTimeNow - Starting $varTool for $varCountScanHosts hosts."
+  if [ "$varTool" = "Nmap" ]; then
+    nmap -iL "$varOutDir/$varTempAddrs" -sS -Pn -n -p 445 --open --script smb-security-mode.nse > "$varOutDir/$varOutScan"
+  elif [ "$varTool" = "RunFinger" ]; then
+    cat "$varOutDir/$varTempAddrs" | xargs -I % python "$varRunFingerLocation" -g -i % > "$varOutDir/$varOutScan"
   fi
   varTimeNow=$(date +%H:%M)
-  echo "Nmap smb-security-mode.nse scan completed at $varTimeNow"
+  echo "$varTimeNow - $varTool completed (see $varOutScan)."
+  
+  if [ -f "$varOutDir/$varTempAddrs" ]; then rm "$varOutDir/$varTempAddrs"; fi
+
 }
 
 function fnParse {
 
+  # Select scan results to parse based on input mode
   if [ "$varInMode" = "Results" ]; then
     varScanResults="$varTarget"
   else
-    varScanResults="$varOutDir/$varTempScan"
-    varTarget="$varTempScan"
+    varScanResults="$varOutDir/$varOutScan"
   fi
 
-  # Make sure there are message_signing results to parse
-
-  varCheckResults=$(grep message_signing "$varScanResults")
-  if [ "$varCheckResults" = "" ]; then
-    echo
-    echo "Parsing Error: No message_signing results in $varTarget."
-    echo
-    exit
-  fi
-
-  echo
-  echo "Parsing results..."
-
-  # Create parsed file of 'ip   message_signing: [value]'
-
-  echo > "$varOutDir/$varTempParsed"
-  echo "=================[ check-smb-signing.sh - Ted R (github: actuated) ]=================" >> "$varOutDir/$varTempParsed"
-  echo >> "$varOutDir/$varTempParsed"
-  varThisLine=""
-  varLastHost=""
-  varStatus=""
-  while read varThisLine; do
-    varCheckForScanReport=$(echo "$varThisLine" | grep "Nmap scan report for")
-    if [ "$varCheckForScanReport" != "" ]; then
-      varLastHost=$(echo "$varThisLine" | awk '{print $5}')
+  if [ "$varTool" = "Nmap" ]; then
+    # Make sure scan results exist
+    varCheckResults=$(grep message_signing "$varScanResults" --color=never)
+    if [ "$varCheckResults" = "" ]; then
+      echo
+      echo "Parsing Error: $varTarget contains no 'message_signing' lines."
+      echo
+      echo "=======================================[ fin ]======================================="
+      echo
+      exit
+    else
+      # Create 'host   result' parsed file for Nmap results
+      echo > "$varOutDir/$varOutParsed"
+      echo "=================[ check-smb-signing.sh - Ted R (github: actuated) ]=================" >> "$varOutDir/$varOutParsed"
+      echo  >> "$varOutDir/$varOutParsed"
+      while read varThisLine; do
+        varCheckForScanReport=$(echo "$varThisLine" | grep "Nmap scan report for" --color=never)
+        if [ "$varCheckForScanReport" != "" ]; then
+          varLastHost=$(echo "$varThisLine" | awk '{print $NF}' | tr -d '()')
+        fi
+        varCheckForVulnState=$(echo "$varThisLine" | grep "message_signing" --color=never)
+        if [ "$varCheckForVulnState" != "" ]; then
+          varStatus=$(echo "$varThisLine" | awk '{print $2, $3}')
+          echo -e "$varLastHost\t$varStatus" >> "$varOutDir/$varOutParsed"
+        fi
+      done < "$varScanResults"
+      echo  >> "$varOutDir/$varOutParsed"
+      echo "=======================================[ fin ]=======================================" >> "$varOutDir/$varOutParsed"
+      echo  >> "$varOutDir/$varOutParsed"
     fi
-    varCheckForVulnState=$(echo "$varThisLine" | grep "message_signing")
-    if [ "$varCheckForVulnState" != "" ]; then
-      varStatus=$(echo "$varThisLine" | awk '{print $2, $3}')
-      echo -e "$varLastHost \t $varStatus" >> "$varOutDir/$varTempParsed"
+  elif [ "$varTool" = "RunFinger" ]; then
+    # Make sure scan results exist
+    varCheckResults=$(grep Signing: "$varScanResults" --color=never)
+    if [ "$varCheckResults" = "" ]; then
+      echo
+      echo "Parsing Error: $varTarget contains no 'Signing:' lines."
+      echo
+      echo "=======================================[ fin ]======================================="
+      echo
+      exit
+    else
+      # Create 'host   result' parsed file for RunFinger results
+      echo > "$varOutDir/$varOutParsed"
+      echo "=================[ check-smb-signing.sh - Ted R (github: actuated) ]=================" >> "$varOutDir/$varOutParsed"
+      echo  >> "$varOutDir/$varOutParsed"
+      awk -F, '{print $1 "\t" $4}' "$varScanResults" | tr -d [\' >> "$varOutDir/$varOutParsed"
+      echo  >> "$varOutDir/$varOutParsed"
+      echo "=======================================[ fin ]=======================================" >> "$varOutDir/$varOutParsed"
+      echo  >> "$varOutDir/$varOutParsed"
     fi
-  done < "$varScanResults"
-  echo >> "$varOutDir/$varTempParsed"
-  echo "=======================================[ fin ]=======================================" >> "$varOutDir/$varTempParsed"
-  echo >> "$varOutDir/$varTempParsed"
-
-  # Create counts
-
-  varTotalHosts=$(grep message_signing "$varOutDir/$varTempParsed" | wc -l )
-  varSigningRequired=$(grep required "$varOutDir/$varTempParsed" | wc -l )
-  varSigningSupported=$(grep supported "$varOutDir/$varTempParsed" | wc -l )
-  varSigningDisabled=$(grep disabled "$varOutDir/$varTempParsed" | wc -l)
-  varPercentRequired=$(awk "BEGIN {print $varSigningRequired*100/$varTotalHosts}" | cut -c1-4)%
-  varPercentSupported=$(awk "BEGIN {print $varSigningSupported*100/$varTotalHosts}" | cut -c1-4)%
-  varPercentDisabled=$(awk "BEGIN {print $varSigningDisabled*100/$varTotalHosts}" | cut -c1-4)%
-
-  echo
-  echo "=====================================[ results ]====================================="
-  echo
-  echo -e "\033[1;37m Total SMB Hosts: \t\t $varTotalHosts \e[0m"
-  echo
-  echo -e "\033[33;32m Signing Required: \t\t $varSigningRequired ($varPercentRequired) \e[0m"
-  echo -e "\033[33;33m Supported, not Required: \t $varSigningSupported ($varPercentSupported) \e[0m"
-  echo -e "\033[33;31m Signing Disabled: \t\t $varSigningDisabled ($varPercentDisabled) \e[0m"
-
-  echo > "$varOutDir/$varTempCount"
-  echo "=================[ check-smb-signing.sh - Ted R (github: actuated) ]=================" >> "$varOutDir/$varTempCount"
-  echo >> "$varOutDir/$varTempCount"
-  echo -e "\033[1;37m Total SMB Hosts: \t\t $varTotalHosts \e[0m" >> "$varOutDir/$varTempCount" >> "$varOutDir/$varTempCount"
-  echo >> "$varOutDir/$varTempCount"
-  echo -e "\033[33;32m Signing Required: \t\t $varSigningRequired ($varPercentRequired) \e[0m" >> "$varOutDir/$varTempCount"
-  echo -e "\033[33;33m Supported, not Required: \t $varSigningSupported ($varPercentSupported) \e[0m" >> "$varOutDir/$varTempCount"
-  echo -e "\033[33;31m Signing Disabled: \t\t $varSigningDisabled ($varPercentDisabled) \e[0m" >> "$varOutDir/$varTempCount"
-  echo  >> "$varOutDir/$varTempCount"
-  echo "=======================================[ fin ]=======================================">> "$varOutDir/$varTempCount"
-  echo  >> "$varOutDir/$varTempCount"
-
-  # Create lists of hosts split by SMB signing value
-
-  if [ "$varSigningDisabled" -gt "0" ]; then
-    grep disabled "$varOutDir/$varTempParsed" | awk '{print $1}' | sort -V > "$varOutDir/hosts-signing-disabled.txt"
-  fi
-
-  if [ "$varSigningSupported" -gt "0" ]; then
-    grep supported "$varOutDir/$varTempParsed" | awk '{print $1}' | sort -V > "$varOutDir/hosts-signing-supported.txt"
-  fi
-
-  if [ "$varSigningRequired" -gt "0" ]; then
-    grep required "$varOutDir/$varTempParsed" | awk '{print $1}' | sort -V > "$varOutDir/hosts-signing-required.txt"
   fi
 
 }
 
-# Read options
+function fnCount {
 
-while [ "$1" != "" ]; do
-  case "$1" in
-    -f )
-      varInMode="File"
-      let varCountInMode=varCountInMode+1
-      shift
-      varTarget="$1"
-      ;;
-    -a )
-      varInMode="Address"
-      let varCountInMode=varCountInMode+1
-      shift
-      varTarget="$1"
-      ;;
-    -r )
-      varInMode="Results"
-      let varCountInMode=varCountInMode+1
-      shift
-      varTarget="$1"
-      ;;
-    --out-dir )
-      shift
-      varOutDir="$1"
-      ;;
-    -h )
-      fnUsage
-      ;;
-    * )
-      echo
-      echo "Error: Unrecognized argument."
-      fnUsage
-      ;;
-  esac
-  shift
-done
+  if [ "$varTool" = "Nmap" ]; then
 
-# Check options
+    # Create totals
+    varTotalHosts=$(grep message_signing "$varOutDir/$varOutParsed" | wc -l )
+    varSigningRequired=$(grep required "$varOutDir/$varOutParsed" | wc -l )
+    varSigningSupported=$(grep supported "$varOutDir/$varOutParsed" | wc -l )
+    varSigningDisabled=$(grep disabled "$varOutDir/$varOutParsed" | wc -l)
+    varPercentRequired=$(awk "BEGIN {print $varSigningRequired*100/$varTotalHosts}" | cut -c1-4)%
+    varPercentSupported=$(awk "BEGIN {print $varSigningSupported*100/$varTotalHosts}" | cut -c1-4)%
+    varPercentDisabled=$(awk "BEGIN {print $varSigningDisabled*100/$varTotalHosts}" | cut -c1-4)%
 
-if [ $varCountInMode -gt 1 ]; then echo; echo "Error: More than one input mode specified."; fnUsage; fi
-
-if [ "$varInMode" = "N" ]; then
-  echo
-  echo "Error: No input mode specified."
-  fnUsage
-elif [ "$varInMode" = "File" ] && [ ! -f "$varTarget" ]; then
-  echo
-  echo "Error: File specified with -f does not exist."
-  fnUsage
-elif [ "$varInMode" = "Address" ] && [ "$varTarget" = "" ]; then
-  echo
-  echo "Error: No address/range specified after -a."
-  fnUsage
-elif [ "$varInMode" = "Address" ]; then
-  varCheckAddr=$(echo $varTarget | awk -F. '{print NF-1}')
-  if [ "$varCheckAddr" != "3" ]; then
+    # Display totals
     echo
-    echo "Error: '$varTarget' does not appear to be an IP address/range."
+    echo -e "\033[1;37m Total SMB Hosts: \t\t $varTotalHosts \e[0m"
+    echo
+    echo -e "\033[33;32m Signing Required: \t\t $varSigningRequired ($varPercentRequired) \e[0m"
+    echo -e "\033[33;33m Supported, not Required: \t $varSigningSupported ($varPercentSupported) \e[0m"
+    echo -e "\033[33;31m Signing Disabled: \t\t $varSigningDisabled ($varPercentDisabled) \e[0m"
+
+    # Create host lists for each result type
+    if [ "$varSigningDisabled" -gt "0" ]; then
+      grep disabled "$varOutDir/$varOutParsed" | awk '{print $1}' | sort -V > "$varOutDir/hosts-signing-disabled.txt"
+    fi
+    if [ "$varSigningSupported" -gt "0" ]; then
+      grep supported "$varOutDir/$varOutParsed" | awk '{print $1}' | sort -V > "$varOutDir/hosts-signing-supported.txt"
+    fi
+    if [ "$varSigningRequired" -gt "0" ]; then
+      grep required "$varOutDir/$varOutParsed" | awk '{print $1}' | sort -V > "$varOutDir/hosts-signing-required.txt"
+    fi
+
+  elif [ "$varTool" = "RunFinger" ]; then
+
+    # Create totals
+    varTotalHosts=$(grep Signing: "$varOutDir/$varOutParsed" | wc -l )
+    varSigningFalse=$(grep Signing:False "$varOutDir/$varOutParsed" | wc -l )
+    varSigningTrue=$(grep Signing:True "$varOutDir/$varOutParsed" | wc -l )
+    varPercentFalse=$(awk "BEGIN {print $varSigningFalse*100/$varTotalHosts}" | cut -c1-4)%
+    varPercentTrue=$(awk "BEGIN {print $varSigningTrue*100/$varTotalHosts}" | cut -c1-4)%
+
+    # Display totals
+    echo
+    echo -e "\033[1;37m Total SMB Hosts: \t $varTotalHosts \e[0m"
+    echo
+    echo -e "\033[33;32m Signing True: \t\t $varSigningTrue ($varPercentTrue) \e[0m"
+    echo -e "\033[33;31m Signing False: \t $varSigningFalse ($varPercentFalse) \e[0m"
+
+    # Create host lists for each result type
+    if [ "$varSigningTrue" -gt "0" ]; then
+      grep Signing:True "$varOutDir/$varOutParsed" | awk '{print $1}' | sort -V > "$varOutDir/hosts-signing-true.txt"
+    fi
+    if [ "$varSigningFalse" -gt "0" ]; then
+      grep Signing:False "$varOutDir/$varOutParsed" | awk '{print $1}' | sort -V > "$varOutDir/hosts-signing-false.txt"
+    fi
+
+  fi
+
+}
+
+function fnCheckOptions {
+
+  # Make sure only one tool specified
+  if [ $varCountTool = 0 ]; then
+    echo
+    echo "Error: No tool (--nmap or --finger) specified."
+    fnUsage
+  elif [ $varCountTool -gt 1 ]; then
+    echo
+    echo "Error: Specify only --nmap or --finger."
     fnUsage
   fi
-elif [ "$varInMode" = "Results" ] && [ ! -f "$varTarget" ]; then
-  echo
-  echo "Error: File specified with -r does not exist."
-  fnUsage
-fi
+
+  # Check RunFinger location if being used
+  if [ "$varTool" = "RunFinger" ] && [ ! -f "$varRunFingerLocation" ]; then
+    echo
+    echo "Error: $varRunFingerLocation does not exist."
+    echo "Use --finger-path or modify varRunFingerLocation in script to specify the file"
+    echo "location of RunFinger.py, including the file name."
+    echo
+    echo "Get Tools/RunFinger.py from https://github.com/lgandx/responder."
+    fnUsage
+  fi
+
+  # Make sure only one input mode specified
+  if [ $varCountInMode = 0 ]; then
+    echo
+    echo "Error: No input mode (-f, -a, -r) specified."
+    fnUsage
+  elif [ $varCountInMode -gt 1 ]; then
+    echo
+    echo "Error: Specify only one input mode (-f, -a, or -r)."
+    fnUsage
+  fi
+
+  # Check file input
+  if [ "$varInMode" = "File" ] && [ ! -f "$varTarget" ]; then
+    echo
+    echo "Error: $varTarget does not exist as a file."
+    fnUsage
+  fi
+
+  # Check address input
+  if [ "$varInMode" = "Address" ]; then
+    varCheckAddress=$(echo "$varTarget" | grep [[:digit:]].[[:digit:]].[[:digit:]].[[:digit:]] --color=never)
+    if [ "$varCheckAddress" = "" ]; then
+      echo
+      echo "Error: '$varTarget' does not appear to be an IP address or range."
+    fi
+  fi
+
+  # See if output directory exists
+  if [ -d "$varOutDir" ]; then
+    echo
+    echo "Note: $varOutDir/ exists. Prior output files may be overwritten."
+    read -p "Press Enter to continue..."
+  else
+    mkdir "$varOutDir"
+    if [ ! -d "$varOutDir" ]; then
+      echo
+      echo "Error: Could not create output directory '$varOutDir'."
+      echo
+      echo "=======================================[ fin ]======================================="
+      echo
+      exit
+    fi
+  fi
+}
 
 echo
 echo "=================[ check-smb-signing.sh - Ted R (github: actuated) ]================="
 
-if [ -d "$varOutDir" ]; then
-  echo
-  echo "Note: $varOutDir/ exists. Prior output files may be overwritten."
-  read -p "Press Enter to continue..."
-else
-  mkdir "$varOutDir"
-fi
+  # Read options
+  while [ "$1" != "" ]; do
+    case "$1" in
+      --nmap )
+        varTool="Nmap"
+        let varCountTool=varCountTool+1
+        ;;
+      --finger )
+        varTool="RunFinger"
+        let varCountTool=varCountTool+1
+        ;;
+      -f )
+        varInMode="File"
+        let varCountInMode=varCountInMode+1
+        shift
+        varTarget="$1"
+        ;;
+      -a )
+        varInMode="Address"
+        let varCountInMode=varCountInMode+1
+        shift
+        varTarget="$1"
+        ;;
+      -r )
+        varInMode="Results"
+        let varCountInMode=varCountInMode+1
+        shift
+        varTarget="$1"
+        ;;
+      --finger-path )
+        shift
+        varRunFingerLocation="$1"
+        ;;
+      --out-dir )
+        shift
+        varOutDir="$1"
+        ;;
+      --host-discovery )
+        varHostDiscovery="Y"
+        ;;
+      -h )
+        fnUsage
+        ;;
+      * )
+        echo
+        echo "Error: Unrecognized argument/option."
+        fnUsage
+        ;;
+    esac
+    shift
+  done
+
+fnCheckOptions
 
 if [ "$varInMode" != "Results" ]; then fnScan; fi
+
 fnParse
 
-echo
-echo "=======================================[ fin ]======================================="
-echo
+echo > "$varOutDir/$varOutCount"
+echo "=================[ check-smb-signing.sh - Ted R (github: actuated) ]=================" >> "$varOutDir/$varOutCount"
+fnCount | tee -a "$varOutDir/$varOutCount"
+echo | tee -a "$varOutDir/$varOutCount"
+echo "=======================================[ fin ]=======================================" | tee -a "$varOutDir/$varOutCount"
+echo | tee -a "$varOutDir/$varOutCount"
+
+
