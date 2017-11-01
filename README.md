@@ -1,67 +1,23 @@
 # check-smb-signing
-Shell script to automate running Nmap's smb-security-mode.nse and parse results into counts and lists of hosts that have message signing disabled, supported, and required.
+Shell script to automate running Nmap's smb-security-mode.nse or lgandx's RunFinger.py and parse results into counts and lists of hosts that have message signing disabled, supported, and required (or true and false for RunFinger).
 
 # Usage
 ```
-./check-smb-signing.sh [input mode] [input parameter] [--out-dir [output directory]]
+./check-smb-signing.sh [tool] [input options] [--out-dir [output directory]] [--host-discovery]
 ```
-* Input options
-  - **-f [file]** can be used to specify a file containing hosts to scan with `nmap --script smb-security-mode.nse`. This file will be used as the `-iL` input file for `nmap`.
-  - **-a [address range]** can be used to specify an address range to scan with `nmap --script smb-security-mode.nse`'. The provide address range will be used as the target specification for `nmap`.
-  - **-r [file]** can be used to skip scanning and simply parsed a text file already contain terminal output of `nmap --script smb-security-mode.nse`. Meant to be used if you already ran the scan separately. Needs results without hostname resultion (`nmap -n ...`).
-  - Only one input mode can be specified.
+* Tool options (must choose one):
+  - **--finger** can be used to select lgandx's RunFinger.py. The file location is set with the `varRunFingerLocation` variable near the beginning of the script, or it can be set with the **--finger-path [path]** option.
+  - **--nmap** can be used to select Nmap's smb-security-mode.nse.
+* Input options (must choose one):
+  - The script will take an address range or list of target hosts and perform an `nmap -sL` list scan against it to break it down into hosts, so you can use Nmap-style ranges to supply inputs for RunFinger.py if you want.
+    - **-a [address/range]** can be used to specify an address (why?) or address range to scan.
+    - **-f [file]** can be used to specify a file containing target hosts to scan.
+  - **-r [file]** can be used to provide a file containing results from a scan you did separately with Nmap's smb-security-mode.nse (stdout) or RunFinger.py (-g grepable output). No scan for SMB signing will be run, results will just be parsed.
 * Output options
-  - Multiple files are written to an output directory, which is **check-smb-signing-YY-MM-DD-HH-MM** by default.
-  - **--out-dir [directory]** can be used to specify an output directory of your choosing.
-* Output files
-  - **check-smb-signing-count-HH-MM.txt** records the number and percentage count shown by the script.
-  - **check-smb-signing-parsed-HH-MM.txt** contains each `ip   message signing: [value]` result.
-  - **check-smb-signing-scan-HH-MM.txt** records the `nmap --script smb-security-mode.nse` output.
-  - **hosts-signing-disabled.txt** lists each IP with SMB signing disabled.
-  - **hosts-signing-required.txt** lists each IP with SMB signing required.
-  - **hosts-signing-supported.txt** lists each IP with SMB signing supported/enabled but not required.
-  
-# Examples
-Input as a list of targets to scan and then parse:
-```
-./check-smb-signing.sh --out-dir test -f smb-hosts.txt 
-
-=================[ check-smb-signing.sh - Ted R (github: actuated) ]=================
-
-Note: test/ exists. Prior output files may be overwritten.
-Press Enter to continue...
-
-Nmap smb-security-mode.nse scan starting against smb-hosts.txt at 09:21
-Nmap smb-security-mode.nse scan completed at 09:21
-
-Parsing results...
-
-=====================================[ results ]=====================================
-
- Total SMB Hosts: 		 2 
-
- Signing Required: 		 0 (0%) 
- Supported, not Required: 	 0 (0%) 
- Signing Disabled: 		 2 (100%) 
-
-=======================================[ fin ]=======================================
-```
-Input as text file containing `nmap -n --script smb-security-mode.nse` terminal output to parse only:
-
-```
-./check-smb-signing.sh --out-dir test2 -r nmap-scan.txt 
-
-=================[ check-smb-signing.sh - Ted R (github: actuated) ]=================
-
-Parsing results...
-
-=====================================[ results ]=====================================
-
- Total SMB Hosts: 		 74 
-
- Signing Required: 		 50 (67.5%) 
- Supported, not Required: 	 14 (18.9%)
- Signing Disabled: 		 10 (13.5%) 
-
-=======================================[ fin ]=======================================
-```
+  - The default output directory is `csmbs-YMDHM/`.
+  - **--out-dir [path]** can be used to specify a different output directory.
+  - Output files will include:
+    - csmbs-count-HH-MM.txt - Output file with the color counts created by the script.
+    - csmbs-parsed-HH-MM.txt - Output file with '[host]   [SMB signing value]' results.
+    - csmbs-scan-HH-MM.txt - RunFinger.py or Nmap smb-security-mode.nse scan results. Not includes when you use **-r** to parse your own scan results file.
+    - hosts-signing-[value].txt - A list of hosts for each SMB signing value (true or false for RunFinger.py and disabled, supported, or required for the NSE. Only created when there are applicable hosts.
