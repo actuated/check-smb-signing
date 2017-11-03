@@ -175,7 +175,7 @@ function fnParse {
       echo "=======================================[ fin ]=======================================" >> "$varOutDir/$varOutParsed"
       echo  >> "$varOutDir/$varOutParsed"
     elif [ "$varCheckResultsStdOut" != "" ]; then
-      # Create 'host   result' parsed file for Nmap results
+      # Create 'host   result' parsed file for stdout RunFinger results
       echo > "$varOutDir/$varOutParsed"
       echo "=================[ check-smb-signing.sh - Ted R (github: actuated) ]=================" >> "$varOutDir/$varOutParsed"
       echo  >> "$varOutDir/$varOutParsed"
