@@ -12,7 +12,7 @@ Shell script to automate running Nmap's smb-security-mode.nse or lgandx's RunFin
   - The script will take an address range or list of target hosts and perform an `nmap -sL` list scan against it to break it down into hosts, so you can use Nmap-style ranges to supply inputs for RunFinger.py if you want.
     - **-a [address/range]** can be used to specify an address (why?) or address range to scan.
     - **-f [file]** can be used to specify a file containing target hosts to scan.
-  - **-r [file]** can be used to provide a file containing results from a scan you did separately with Nmap's smb-security-mode.nse (stdout) or RunFinger.py (-g grepable output). No scan for SMB signing will be run, results will just be parsed.
+  - **-r [file]** can be used to provide a file containing results from a scan you did separately with Nmap's smb-security-mode.nse (stdout) or RunFinger.py (-g grepable output or stdout). No scan for SMB signing will be run, results will just be parsed.
 * Output options
   - The default output directory is `csmbs-YMDHM/`.
   - **--out-dir [path]** can be used to specify a different output directory.

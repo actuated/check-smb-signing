@@ -4,8 +4,9 @@
 # v2.0 - 10/30/2017
 # Script to run and parse SMB message signing results using Nmap's smb-security-mode.nse or RunFinger.py
 # 11/01/2017 - Test of different options and conditions
+# 11/03/2017 - Added support for RunFinger.py stdout input file parsing
 varDateCreated="10/30/2017"
-varDateLastMod="11/01/2017"
+varDateLastMod="11/03/2017"
 
 # Set location for RunFinger.py
 varRunFingerLocation="/usr/share/responder/tools/RunFinger.py"
@@ -47,7 +48,7 @@ function fnUsage {
   echo "-a [address/range]     Specify an address or address range to scan."
   echo "-f [file]              Specify a file containing addresses to scan."
   echo "-r [file]              Specify a file containing stdout Nmap smb-security-mode.nse"
-  echo "                       results or RunFinger.py greppabe output to parse (no scan)."
+  echo "                       results or RunFinger.py output to parse (no scan is run)."
   echo
   echo "Note: -a and -f inputs will run through an Nmap list scan (-sL) to create a list of"
   echo "target hosts from any Nmap-friendly range input before the NSE or RunFinger.py are"
@@ -161,17 +162,11 @@ function fnParse {
       echo  >> "$varOutDir/$varOutParsed"
     fi
   elif [ "$varTool" = "RunFinger" ]; then
-    # Make sure scan results exist
-    varCheckResults=$(grep Signing: "$varScanResults" --color=never)
-    if [ "$varCheckResults" = "" ]; then
-      echo
-      echo "Parsing Error: $varTarget contains no 'Signing:' lines."
-      echo
-      echo "=======================================[ fin ]======================================="
-      echo
-      exit
-    else
-      # Create 'host   result' parsed file for RunFinger results
+    # See if scan results are grepable, stdout, or do not exist
+    varCheckResultsGrep=$(grep ", Signing:" "$varScanResults" --color=never)
+    varCheckResultsStdOut=$(grep Retrieving "$varScanResults" --color=never)
+    if [ "$varCheckResultsGrep" != "" ]; then
+      # Create 'host   result' parsed file for grepable RunFinger results
       echo > "$varOutDir/$varOutParsed"
       echo "=================[ check-smb-signing.sh - Ted R (github: actuated) ]=================" >> "$varOutDir/$varOutParsed"
       echo  >> "$varOutDir/$varOutParsed"
@@ -179,9 +174,34 @@ function fnParse {
       echo  >> "$varOutDir/$varOutParsed"
       echo "=======================================[ fin ]=======================================" >> "$varOutDir/$varOutParsed"
       echo  >> "$varOutDir/$varOutParsed"
+    elif [ "$varCheckResultsStdOut" != "" ]; then
+      # Create 'host   result' parsed file for Nmap results
+      echo > "$varOutDir/$varOutParsed"
+      echo "=================[ check-smb-signing.sh - Ted R (github: actuated) ]=================" >> "$varOutDir/$varOutParsed"
+      echo  >> "$varOutDir/$varOutParsed"
+      while read varThisLine; do
+        varCheckForScanReport=$(echo "$varThisLine" | grep Retrieving --color=never)
+        if [ "$varCheckForScanReport" != "" ]; then
+          varLastHost=$(echo "$varThisLine" | awk '{print $4}' | sed 's/\.\.\.//g')
+        fi
+        varCheckForVulnState=$(echo "$varThisLine" | grep "SMB signing" --color=never)
+        if [ "$varCheckForVulnState" != "" ]; then
+          varStatus=$(echo "$varThisLine" | awk '{print "Signing:" $NF}')
+          echo -e "$varLastHost\t$varStatus" >> "$varOutDir/$varOutParsed"
+        fi
+      done < "$varScanResults"
+      echo  >> "$varOutDir/$varOutParsed"
+      echo "=======================================[ fin ]=======================================" >> "$varOutDir/$varOutParsed"
+      echo  >> "$varOutDir/$varOutParsed"            
+    elif [ "$varCheckResultsGrep" = "" ] && [ "$varCheckResultsStdOut" = "" ]; then
+      echo
+      echo "Parsing Error: $varTarget contains no 'Signing:' lines."
+      echo
+      echo "=======================================[ fin ]======================================="
+      echo
+      exit
     fi
   fi
-
 }
 
 function fnCount {
