@@ -19,6 +19,6 @@ Shell script to automate running Nmap's smb-security-mode.nse or lgandx's RunFin
   - Output files will include:
     - csmbs-count-HH-MM.txt - Output file with the color counts created by the script.
     - csmbs-parsed-HH-MM.txt - Output file with '[host]   [SMB signing value]' results.
-    - csmbs-scan-HH-MM.txt - RunFinger.py or Nmap smb-security-mode.nse scan results. Not includes when you use **-r** to parse your own scan results file.
+    - csmbs-scan-HH-MM.txt - RunFinger.py or Nmap smb-security-mode.nse scan results. Not included when you use **-r** to parse your own scan results file.
     - hosts-signing-[value].txt - A list of hosts for each SMB signing value (true or false for RunFinger.py and disabled, supported, or required for the NSE. Only created when there are applicable hosts.
-* **--host-discovery** - Optionally run an 'nmap -sn' host discovery scan against **-a** or **-f** targets before running the NSE or RunFinger.py against them.
+* **--host-discovery** - Optionally run an `nmap -sn` host discovery scan against **-a** or **-f** targets before running the NSE or RunFinger.py against them.
